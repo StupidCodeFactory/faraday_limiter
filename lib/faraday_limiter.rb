@@ -1,4 +1,7 @@
+require 'singleton'
+require 'concurrent-edge'
 require 'faraday_limiter/version'
+require 'faraday_limiter/bucket'
 require 'faraday'
 
 module FaradayLimiter
@@ -7,46 +10,32 @@ module FaradayLimiter
 
   class Middleware < Faraday::Middleware
 
+    DEFAULT_BUCKET_KEY = :default
+
     def initialize(app, options = {})
       super(app)
-      self.app = app
+      self.app     = app
       self.options = options
+      self.buckets = Concurrent::LazyRegister.new
+      bucket_ids = options.fetch(:bucket_ids) { [DEFAULT_BUCKET_KEY] }
+
+      limit_per_bucket = limit / bucket_ids.size
+
+      bucket_ids.each do |bucket_id|
+        buckets.add(bucket_id) { Bucket.new(limit_per_bucket, interval) }
+      end
     end
 
     def call(env)
+      bucket_key   = env.request.context[:bucket_key] || DEFAULT_BUCKET_KEY
       request_cost = env.request.context && env.request.context[:request_cost] || 1
-      reset_limits
 
-      if limit_exceeded?
-        raise LimitReached
-      elsif request_would_exceed_limit?(request_cost)
-        raise WouldLimitReached
-      else
-        self.limit = limit - request_cost
-        app.call(env)
-      end
-
+      buckets[bucket_key].take(request_cost) { app.call(env) }
     end
 
     private
 
-    attr_accessor :app, :options
-    attr_writer :limit, :started_at
-
-    def reset_limits
-      return unless started_at + interval <= Time.now.utc
-
-      self.started_at = Time.now.utc
-      self.limit = options[:limit]
-    end
-
-    def limit_exceeded?
-      limit <= 0
-    end
-
-    def request_would_exceed_limit?(request_cost)
-      limit < request_cost
-    end
+    attr_accessor :app, :options, :buckets
 
     def limit
       @limit ||= options[:limit]
@@ -54,10 +43,6 @@ module FaradayLimiter
 
     def interval
       @interval ||= options[:interval]
-    end
-
-    def started_at
-      @started_at ||= Time.now.utc
     end
   end
 end
