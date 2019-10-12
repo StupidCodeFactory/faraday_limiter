@@ -1,4 +1,4 @@
-RSpec.describe FaradayLimiter do
+RSpec.describe FaradayLimiter::Middleware do
   include ActiveSupport::Testing::TimeHelpers
 
   it 'has a version number' do

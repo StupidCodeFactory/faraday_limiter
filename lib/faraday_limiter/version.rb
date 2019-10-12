@@ -1,5 +1,3 @@
-require 'faraday'
-
-class FaradayLimiter < Faraday::Middleware
+module FaradayLimiter
   VERSION = "0.1.0"
 end
