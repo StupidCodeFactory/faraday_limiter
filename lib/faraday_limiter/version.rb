@@ -1,5 +1,3 @@
-require 'faraday'
-
-class FaradayLimiter < Faraday::Middleware
-  VERSION = "0.1.0"
+module FaradayLimiter
+  VERSION = "0.1.0.beta1"
 end
