@@ -13,8 +13,6 @@ Gem::Specification.new do |spec|
   spec.homepage      = "https://github.com/StupidCodeFactory/faraday_limiter"
   spec.license       = "MIT"
 
-  spec.metadata["allowed_push_host"] = "TODO: Set to 'http://mygemserver.com'"
-
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = spec.homepage
   spec.metadata["changelog_uri"] = "https://github.com/StupidCodeFactory/faraday_limiter"
