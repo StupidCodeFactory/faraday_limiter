@@ -1,4 +1,3 @@
-require 'singleton'
 require 'concurrent-edge'
 require 'faraday_limiter/version'
 require 'faraday_limiter/bucket'
@@ -12,46 +11,31 @@ module FaradayLimiter
   class Middleware < Faraday::Middleware
 
     DEFAULT_BUCKET_KEY = :default
+    DEFAULT_REQUEST_COST = 1
+    RESETS_AT_HEADER = 'FaradayLimiter-Resets-At'
+    BUCKET_ID_HEADER = 'FaradayLimiter-Bucket-Id'
 
     def initialize(app, options = {})
       super(app)
       self.app        = app
-      self.options    = options
-      self.bucket_ids = options.fetch(:bucket_ids) { [DEFAULT_BUCKET_KEY] }
-      raise ArgumentError if limit < bucket_ids.size
+      self.buckets    = options.fetch(:buckets) { [DEFAULT_BUCKET_KEY] }
     end
 
     def call(env)
       bucket_id   = env.request.context[:bucket_id] || DEFAULT_BUCKET_KEY
-      request_cost = env.request.context && env.request.context[:request_cost] || 1
-
-      buckets[bucket_id].take(request_cost) { app.call(env) }
+      request_cost = env.request.context && env.request.context[:request_cost] || DEFAULT_REQUEST_COST
+      bucket = buckets[bucket_id]
+      bucket.take(request_cost) do
+        app.call(env).on_complete do |e|
+          e.response_headers[RESETS_AT_HEADER] = bucket.resets_at
+          e.response_headers[BUCKET_ID_HEADER] = bucket_id
+        end
+      end
     end
 
     private
 
-    attr_accessor :app, :options, :bucket_ids
+    attr_accessor :app, :buckets
 
-    def buckets
-      @buckets ||= begin
-        register         = Concurrent::LazyRegister.new
-        limit_per_bucket = (limit / bucket_ids.size.to_f).ceil
-        tokens = Array.new(limit) { |i| i }
-
-        bucket_ids.each do |bucket_id|
-          bucket_limit = tokens.pop(limit_per_bucket).size
-          register.add(bucket_id) { RedisBucket.new(bucket_id, bucket_limit, resets_at: (Time.now + interval).to_i) }
-        end
-        register
-      end
-    end
-
-    def limit
-      @limit ||= options[:limit]
-    end
-
-    def interval
-      @interval ||= options[:interval]
-    end
   end
 end
