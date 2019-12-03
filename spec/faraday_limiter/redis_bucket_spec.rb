@@ -15,6 +15,31 @@ RSpec.describe FaradayLimiter::RedisBucket do
     subject.reset
   end
 
+  describe '.create' do
+    let(:interval)      { 60 }
+    let(:bucket_one_id) { :bucket_one_id }
+    let(:bucket_two_id) { :bucket_two_id }
+    let(:bucket_ids)    { [bucket_one_id, bucket_two_id] }
+    let(:buckets)       { described_class.create_list(limit: limit, interval: interval, bucket_ids: bucket_ids) }
+    let(:bucket_one)    { instance_double(described_class) }
+    let(:bucket_two)    { instance_double(described_class) }
+    let(:nowish)        { Time.now }
+
+    around { |example| travel_to(nowish) { example.run } }
+
+    it 'returns a concurrent lazy register has bucket list' do
+      expect(FaradayLimiter::RedisBucket)
+        .to receive(:new).with(bucket_one_id, limit / 2, resets_at: (nowish + interval).to_i)
+        .and_return(bucket_one)
+      expect(FaradayLimiter::RedisBucket)
+        .to receive(:new).with(bucket_two_id, limit / 2, resets_at: (nowish + interval).to_i)
+        .and_return(bucket_two)
+
+      expect(buckets[:bucket_one_id]).to eq(bucket_one)
+      expect(buckets[:bucket_two_id]).to eq(bucket_two)
+    end
+  end
+
   describe '#take' do
 
     context 'when the current window time has not been exceeded' do

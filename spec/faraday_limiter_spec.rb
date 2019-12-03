@@ -30,99 +30,46 @@ RSpec.describe FaradayLimiter::Middleware do
             'Accept-Encoding'=>'gzip;q=1.0,deflate;q=0.6,identity;q=0.3',
             'User-Agent'=>'Faraday v0.17.0'
           }).
-        to_return(status: 200, body: "", headers: {})
+        to_return(status: 200, body: {status: 200}.to_json, headers: {})
     end
 
-
-    describe 'bucket configuration' do
-      let(:redis) { Redis.new }
-      let(:bucket_one) { instance_double(FaradayLimiter::RedisBucket) }
-      let(:nowish)       { Time.now }
-
-      before do
-        redis.del(described_class::DEFAULT_BUCKET_KEY)
+    context 'when providing the buckets' do
+      let(:nowish)        { Time.now }
+      let(:bucket_one_id) { :bucket_one }
+      let(:bucket_two_id) { :bucket_two }
+      let(:bucket_ids)    { [bucket_one_id, bucket_two_id] }
+      let(:register) { Concurrent::LazyRegister.new }
+      let(:buckets) do
+        FaradayLimiter::RedisBucket.create_list(
+          bucket_ids: bucket_ids,
+          limit: request_limit,
+          interval: interval
+        )
       end
-
-      context 'when no bucket_ids specified' do
-
-        before { stub_the_request }
-
-        it 'uses the default' do
-          travel_to nowish do
-            expect(FaradayLimiter::RedisBucket)
-              .to receive(:new)
-                    .with(described_class::DEFAULT_BUCKET_KEY, request_limit, resets_at: (nowish + interval).to_i)
-                    .and_return(bucket_one)
-            expect(bucket_one).to receive(:take).with(request_cost).and_yield
-
-            make_request
-          end
+      let(:connection) do
+        Faraday.new(url: 'http://localhost:3000') do |con|
+          con.use described_class, buckets: buckets
+          con.adapter :net_http
         end
       end
+      let(:request_bucket_one_headers) { make_request(bucket_one_id).headers }
+      let(:request_bucket_two_headers) { make_request(bucket_two_id).headers }
 
-      context 'when bucket_ids are specified' do
-        let(:bucket_one_id) { :bucket_one }
-        let(:bucket_two_id) { :bucket_two }
-        let(:bucket_two)    { instance_double(FaradayLimiter::RedisBucket) }
-        let(:bucket_ids)    { [bucket_one_id, bucket_two_id] }
+      around { |example| travel_to(nowish) { example.run } }
 
-        let(:connection) do
-          Faraday.new(url: 'http://localhost:3000') do |con|
-            con.use described_class, limit: request_limit, interval: interval, bucket_ids: bucket_ids
-            con.adapter :net_http
-          end
-        end
+      before { stub_the_request }
 
-        before do
-          stub_the_request
-          redis.del(bucket_one_id)
-          redis.del(bucket_two_id)
-        end
-
-        it 'configures the appropriate amout of requests per bucket' do
-          travel_to nowish do
-            expect(FaradayLimiter::RedisBucket)
-              .to receive(:new)
-                    .with(
-                      bucket_one_id,
-                      request_limit / bucket_ids.size,
-                      resets_at: (nowish + interval).to_i)
-                    .and_return(bucket_one)
-            expect(FaradayLimiter::RedisBucket).not_to receive(:new).with(any_args)
-
-            expect(bucket_one).to receive(:take).with(request_cost).and_yield
-            expect(bucket_two).not_to receive(:take).with(request_cost).and_yield
-
-            make_request(bucket_one_id)
-          end
-        end
-
-        describe 'when limit is smaller than bucket store' do
-          let(:request_limit) { 1 }
-
-          it { expect { make_request(bucket_one_id) }.to raise_error(ArgumentError) }
-        end
-
-        describe 'when limit is smaller than bucket store' do
-          let(:request_limit) { 3 }
-          let(:expected_allowed_tokens) { 1 }
-
-          it 'configures the last buckets with less tokens' do
-            travel_to nowish do
-              expect(FaradayLimiter::RedisBucket)
-                .to receive(:new)
-                      .with(
-                        bucket_two_id,
-                        expected_allowed_tokens,
-                        resets_at: (nowish + interval).to_i)
-                      .and_return(bucket_two)
-              expect(bucket_two).to receive(:take).with(request_cost).and_yield
-
-              make_request(bucket_two_id)
-            end
-          end
-        end
+      it "does something" do
+        expect(request_bucket_one_headers).to include(
+          described_class::RESETS_AT_HEADER => (nowish + interval).to_i,
+          described_class::BUCKET_ID_HEADER => bucket_one_id,
+        )
+        expect(request_bucket_two_headers).to include(
+          described_class::RESETS_AT_HEADER => (nowish + interval).to_i,
+          described_class::BUCKET_ID_HEADER => bucket_two_id,
+        )
       end
     end
+
   end
 end
