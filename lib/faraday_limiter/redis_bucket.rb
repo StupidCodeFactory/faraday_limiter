@@ -22,7 +22,6 @@ module FaradayLimiter
       limit_per_bucket = (limit / bucket_ids.size.to_f).ceil
       tokens = Array.new(limit) { |i| i }
 
-
       bucket_ids.each do |bucket_id|
         bucket_limit = tokens.pop(limit_per_bucket).size
         register.add(bucket_id) do
