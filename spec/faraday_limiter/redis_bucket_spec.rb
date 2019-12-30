@@ -55,7 +55,12 @@ RSpec.describe FaradayLimiter::RedisBucket do
             (limit - 1).times { subject.take(request_cost, &lambda {}) }
           end
 
-          it { expect { subject.take(2, &lambda {}) }.to raise_error(FaradayLimiter::WouldReachBucketLimit) }
+          it { expect { subject.take(2, &lambda {}) }
+                 .to raise_error(
+                       FaradayLimiter::WouldReachBucketLimit,
+                       '{"current_windown_request_count":9,"limit":10,"requested":2}'
+                     )
+          }
         end
       end
 

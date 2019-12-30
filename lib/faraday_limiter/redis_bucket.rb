@@ -1,3 +1,4 @@
+require 'json'
 require 'redis'
 
 module FaradayLimiter
@@ -53,7 +54,12 @@ module FaradayLimiter
       if current_windown_request_count >= limit
         raise ReachedBucketLimit
       elsif (current_windown_request_count + request_cost) > limit
-        raise WouldReachBucketLimit
+        message = {
+          current_windown_request_count: current_windown_request_count,
+          limit: limit,
+          requested: request_cost
+        }
+        raise WouldReachBucketLimit, JSON.generate(message)
       else
         yield
       end
