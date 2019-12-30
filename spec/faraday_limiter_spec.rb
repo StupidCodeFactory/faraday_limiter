@@ -28,7 +28,7 @@ RSpec.describe FaradayLimiter::Middleware do
           headers: {
             'Accept'=>'*/*',
             'Accept-Encoding'=>'gzip;q=1.0,deflate;q=0.6,identity;q=0.3',
-            'User-Agent'=>'Faraday v0.17.0'
+            'User-Agent'=>'Faraday v0.17.1'
           }).
         to_return(status: 200, body: {status: 200}.to_json, headers: {})
     end
@@ -38,7 +38,6 @@ RSpec.describe FaradayLimiter::Middleware do
       let(:bucket_one_id) { :bucket_one }
       let(:bucket_two_id) { :bucket_two }
       let(:bucket_ids)    { [bucket_one_id, bucket_two_id] }
-      let(:register) { Concurrent::LazyRegister.new }
       let(:buckets) do
         FaradayLimiter::RedisBucket.create_list(
           bucket_ids: bucket_ids,

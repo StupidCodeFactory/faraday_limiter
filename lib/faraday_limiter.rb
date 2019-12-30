@@ -18,7 +18,9 @@ module FaradayLimiter
     def initialize(app, options = {})
       super(app)
       self.app        = app
-      self.buckets    = options.fetch(:buckets) { [DEFAULT_BUCKET_KEY] }
+      self.buckets    = options.fetch(:buckets) do
+        RedisBucket.create_list(bucket_ids: [DEFAULT_BUCKET_KEY], interval: 1)
+      end
     end
 
     def call(env)
