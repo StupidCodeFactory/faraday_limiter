@@ -9,8 +9,9 @@ module FaradayLimiter
   class WouldLimitReached < RuntimeError; end
 
   class Middleware < Faraday::Middleware
+    BucketNotFound = Class.new(RuntimeError)
 
-    DEFAULT_BUCKET_KEY = :default
+    DEFAULT_BUCKET_KEY = :default_bucket_id
     DEFAULT_REQUEST_COST = 1
     RESETS_AT_HEADER = 'FaradayLimiter-Resets-At'
     BUCKET_ID_HEADER = 'FaradayLimiter-Bucket-Id'
@@ -27,6 +28,9 @@ module FaradayLimiter
       bucket_id   = env.request.context[:bucket_id] || DEFAULT_BUCKET_KEY
       request_cost = env.request.context && env.request.context[:request_cost] || DEFAULT_REQUEST_COST
       bucket = buckets[bucket_id]
+
+      raise BucketNotFound, "Could not find bucket with bucket_id: #{bucket_id}" if bucket.nil?
+
       bucket.take(request_cost) do
         app.call(env).on_complete do |e|
           e.response_headers[RESETS_AT_HEADER] = bucket.resets_at
